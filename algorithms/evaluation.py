@@ -7,7 +7,9 @@ if TYPE_CHECKING:
     from world.game_state import GameState
 
 
-def evaluation_function(state: GameState) -> float:
+from algorithms.utils import bfs_distance, dijkstra
+
+def evaluation_function(state) -> float:
     """
     Evaluation function for non-terminal states of the drone vs. hunters game.
 
@@ -41,5 +43,56 @@ def evaluation_function(state: GameState) -> float:
     - Consider edge cases: no pending deliveries, no hunters nearby.
     - A good evaluation function balances delivery progress with hunter avoidance.
     """
-    # TODO: Implement your code here
-    return 0.0
+
+    # Estados terminales: retornamos el valor máximo o mínimo directamente
+    if state.is_win():
+        return 1000.0
+    if state.is_lose():
+        return -1000.0
+
+    layout = state.get_layout()
+    drone_pos = state.get_drone_position()
+    hunter_positions = state.get_hunter_positions()
+    pending = state.get_pending_deliveries()
+
+    score = 0.0
+
+    # --- Factor 1: distancia al punto de entrega más cercano ---
+    # Usamos dijkstra para respetar el costo real del terreno.
+    # Cuanto más cerca esté el dron de una entrega, mejor.
+    if pending:
+        min_delivery_cost = float('inf')
+        for delivery in pending:
+            cost, _ = dijkstra(layout, drone_pos, delivery)
+            if cost < min_delivery_cost:
+                min_delivery_cost = cost
+
+        # Penalizamos por la distancia: más lejos = peor puntaje
+        if min_delivery_cost == float('inf'):
+            score -= 200
+        else:
+            score -= min_delivery_cost * 2
+
+    # --- Factor 2: cantidad de entregas pendientes ---
+    # Menos entregas pendientes es mejor (estamos más cerca de ganar).
+    score -= len(pending) * 50
+
+    # --- Factor 3: distancia de los cazadores al dron ---
+    # Si el cazador está lejos, el dron está más seguro.
+    # Usamos BFS con restricción de cazadores (solo caminan por terreno libre).
+    for hunter_pos in hunter_positions:
+        dist = bfs_distance(layout, hunter_pos, drone_pos, hunter_restricted=True)
+        if dist == float('inf'):
+            # El cazador no puede alcanzarnos: ninguna penalización
+            continue
+        elif dist <= 1:
+            # El cazador está adyacente: situación muy peligrosa
+            score -= 500
+        elif dist <= 3:
+            # El cazador está cerca: penalizamos bastante
+            score -= 150
+        else:
+            # El cazador está lejos: pequeña recompensa por la distancia
+            score += dist * 5
+
+    return max(-999.0, min(999.0, score))
