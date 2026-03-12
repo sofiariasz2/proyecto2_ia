@@ -223,8 +223,9 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
 
         def expectimax(state, agent_index, depth):
             """
-            Igual que minimax pero los nodos de los cazadores promedian sus sucesores,
-            modelando que el cazador puede actuar aleatoriamente.
+            Igual que minimax pero los nodos de los cazadores usan una política mixta:
+            con probabilidad self.prob actúan al azar (promedio uniforme),
+            con probabilidad (1 - self.prob) actúan greedy (minimizan el valor).
             """
 
             if state.is_win() or state.is_lose() or depth == 0:
@@ -247,12 +248,14 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
                     best_value = max(best_value, value)
                 return best_value
             else:
-                # Nodo de azar: promedio uniforme sobre todas las acciones del cazador
-                total = 0.0
-                for action in legal_actions:
-                    successor = state.generate_successor(agent_index, action)
-                    total += expectimax(successor, next_agent, next_depth)
-                return total / len(legal_actions)
+                # Nodo de azar: política mixta greedy/aleatoria
+                values = [
+                    expectimax(state.generate_successor(agent_index, action), next_agent, next_depth)
+                    for action in legal_actions
+                ]
+                avg_value = sum(values) / len(values)   # cazador actúa al azar
+                min_value = min(values)                  # cazador actúa greedy (minimiza)
+                return self.prob * avg_value + (1.0 - self.prob) * min_value
 
         legal_actions = state.get_legal_actions(0)
         if not legal_actions:
